@@ -22,13 +22,11 @@ func NewRecord(key string, value []byte, tombstone bool) *Record {
 	}
 }
 
-// Format: [CRC(4)] [Timestamp(8)] [Tombstone(1)] [KeySize(4)] [ValueSize(4)] [Key] [Value]
 func (r *Record) Serialize() []byte {
 	keyBytes := []byte(r.Key)
 	keySize := uint32(len(keyBytes))
 	valueSize := uint32(len(r.Value))
 
-	// Izracunamo ukupnu velicinu: CRC + Timestamp + Tombstone + KeySize + ValueSize + Key + Value
 	totalSize := 4 + 8 + 1 + 4 + 4 + int(keySize) + int(valueSize)
 	buf := make([]byte, totalSize)
 
@@ -59,4 +57,60 @@ func (r *Record) Serialize() []byte {
 	binary.LittleEndian.PutUint32(buf[0:], crc)
 
 	return buf
+}
+
+func GetRecordSize(data []byte) (int, error) {
+	if len(data) < 21 {
+		return 0, ErrCorruptedRecord
+	}
+	keySize := int(binary.LittleEndian.Uint32(data[13:17]))
+	valueSize := int(binary.LittleEndian.Uint32(data[17:21]))
+	return 21 + keySize + valueSize, nil
+}
+
+func DeserializeRecord(data []byte) (*Record, error) {
+	if len(data) < 21 {
+		return nil, ErrCorruptedRecord
+	}
+
+	storedCRC := binary.LittleEndian.Uint32(data[0:4])
+	computedCRC := crc32.ChecksumIEEE(data[4:])
+	if storedCRC != computedCRC {
+		return nil, ErrCRCMismatch
+	}
+
+	offset := 4
+
+	timestamp := binary.LittleEndian.Uint64(data[offset:])
+	offset += 8
+
+	tombstone := data[offset] == 1
+	offset++
+
+	keySize := binary.LittleEndian.Uint32(data[offset:])
+	offset += 4
+
+	valueSize := binary.LittleEndian.Uint32(data[offset:])
+	offset += 4
+
+	if len(data) < offset+int(keySize)+int(valueSize) {
+		return nil, ErrCorruptedRecord
+	}
+
+	key := string(data[offset : offset+int(keySize)])
+	offset += int(keySize)
+
+	value := make([]byte, valueSize)
+	copy(value, data[offset:offset+int(valueSize)])
+
+	return &Record{
+		Key:       key,
+		Value:     value,
+		Tombstone: tombstone,
+		Timestamp: timestamp,
+	}, nil
+}
+
+func (r *Record) Size() int {
+	return 4 + 8 + 1 + 4 + 4 + len(r.Key) + len(r.Value)
 }
