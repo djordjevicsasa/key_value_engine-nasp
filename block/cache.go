@@ -1,6 +1,7 @@
 package block
 
 import (
+	"fmt"
 	"key_value_engine-nasp/cache"
 )
 
@@ -51,4 +52,48 @@ func (cm *CachedManager) Write(filePath string, blockIndex int, data []byte) err
 
 func (cm *CachedManager) ClearCache() {
 	cm.cache.Clear()
+}
+
+func (cm *CachedManager) ReadFile(filePath string) ([]byte, error) {
+	fileSize, err := cm.manager.FileSize(filePath)
+	if err != nil {
+		return nil, err
+	}
+	if fileSize == 0 {
+		return []byte{}, nil
+	}
+
+	bs := cm.manager.BlockSize()
+	blockCount := (int(fileSize) + bs - 1) / bs
+	result := make([]byte, 0, fileSize)
+
+	for i := 0; i < blockCount; i++ {
+		blockData, err := cm.Read(filePath, i)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, blockData...)
+	}
+
+	return result[:fileSize], nil
+}
+
+func (cm *CachedManager) ReadRaw(filePath string, offset int64, size int) ([]byte, error) {
+	return cm.manager.ReadRaw(filePath, offset, size)
+}
+
+func (cm *CachedManager) WriteFile(filePath string, data []byte) error {
+	return cm.manager.WriteFile(filePath, data)
+}
+
+func (cm *CachedManager) FileSize(filePath string) (int64, error) {
+	return cm.manager.FileSize(filePath)
+}
+
+func (cm *CachedManager) BlockSize() int {
+	return cm.manager.BlockSize()
+}
+
+func cacheKey(filePath string, blockIndex int) string {
+	return fmt.Sprintf("%s:%d", filePath, blockIndex)
 }
