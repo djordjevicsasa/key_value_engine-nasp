@@ -4,6 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"key_value_engine-nasp/block"
 	"key_value_engine-nasp/model"
@@ -205,4 +208,94 @@ func (w *WAL) readSegment(segIndex int) ([]*model.Record, error) {
 	}
 
 	return records, nil
+}
+
+func (w *WAL) findWritePosition() {
+	segPath := w.segmentPath(w.currentSegment)
+	fileSize, err := w.manager.FileSize(segPath)
+	if err != nil {
+		return
+	}
+
+	if fileSize == 0 {
+		return
+	}
+
+	fSize := int(fileSize)
+	w.currentBlock = (fSize - 1) / w.blockSize
+	w.blockOffset = 0
+
+	data, err := w.manager.ReadFile(segPath)
+	if err != nil {
+		return
+	}
+
+	blockStart := w.currentBlock * w.blockSize
+	if blockStart >= len(data) {
+		return
+	}
+
+	blockEnd := blockStart + w.blockSize
+	if blockEnd > len(data) {
+		blockEnd = len(data)
+	}
+	blockData := data[blockStart:blockEnd]
+
+	offset := 0
+	for offset+fragmentHeaderSize <= len(blockData) {
+		dataSize := int(binary.LittleEndian.Uint32(blockData[offset+1 : offset+5]))
+		if dataSize == 0 {
+			break
+		}
+		offset += fragmentHeaderSize + dataSize
+	}
+	w.blockOffset = offset
+}
+
+func (w *WAL) Clear() error {
+	segments, err := w.listSegments()
+	if err != nil {
+		return err
+	}
+
+	for _, seg := range segments {
+		path := w.segmentPath(seg)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	w.currentSegment = 0
+	w.currentBlock = 0
+	w.blockOffset = 0
+
+	return nil
+}
+
+func (w *WAL) listSegments() ([]int, error) {
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var indices []int
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "wal_") {
+			continue
+		}
+		var idx int
+		if _, err := fmt.Sscanf(entry.Name(), "wal_%d.log", &idx); err == nil {
+			indices = append(indices, idx)
+		}
+	}
+
+	sort.Ints(indices)
+	return indices, nil
+}
+
+func (w *WAL) segmentPath(index int) string {
+	return filepath.Join(w.dir, fmt.Sprintf("wal_%05d.log", index))
 }
