@@ -117,3 +117,92 @@ func (w *WAL) Append(record *model.Record) error {
 
 	return nil
 }
+
+func (w *WAL) ReadAll() ([]*model.Record, error) {
+	segments, err := w.listSegments()
+	if err != nil {
+		return nil, err
+	}
+
+	var records []*model.Record
+
+	for _, segIndex := range segments {
+		segRecords, err := w.readSegment(segIndex)
+		if err != nil {
+			continue
+		}
+		records = append(records, segRecords...)
+	}
+
+	return records, nil
+}
+
+func (w *WAL) readSegment(segIndex int) ([]*model.Record, error) {
+	segPath := w.segmentPath(segIndex)
+
+	fileData, err := w.manager.ReadFile(segPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var records []*model.Record
+	var assemblyBuf []byte
+
+	totalBlocks := (len(fileData) + w.blockSize - 1) / w.blockSize
+
+	for blockIdx := 0; blockIdx < totalBlocks; blockIdx++ {
+		blockStart := blockIdx * w.blockSize
+		blockEnd := blockStart + w.blockSize
+		if blockEnd > len(fileData) {
+			blockEnd = len(fileData)
+		}
+		blockData := fileData[blockStart:blockEnd]
+
+		offset := 0
+		for offset+fragmentHeaderSize <= len(blockData) {
+			fragType := blockData[offset]
+			dataSize := int(binary.LittleEndian.Uint32(blockData[offset+1 : offset+5]))
+
+			if dataSize == 0 {
+				break
+			}
+
+			if offset+fragmentHeaderSize+dataSize > len(blockData) {
+				break
+			}
+
+			chunk := blockData[offset+fragmentHeaderSize : offset+fragmentHeaderSize+dataSize]
+			offset += fragmentHeaderSize + dataSize
+
+			switch fragType {
+			case fragmentFull:
+				rec, err := model.DeserializeRecord(chunk)
+				if err == nil {
+					records = append(records, rec)
+				}
+				assemblyBuf = nil
+
+			case fragmentFirst:
+				assemblyBuf = make([]byte, 0, dataSize*2)
+				assemblyBuf = append(assemblyBuf, chunk...)
+
+			case fragmentMiddle:
+				if assemblyBuf != nil {
+					assemblyBuf = append(assemblyBuf, chunk...)
+				}
+
+			case fragmentLast:
+				if assemblyBuf != nil {
+					assemblyBuf = append(assemblyBuf, chunk...)
+					rec, err := model.DeserializeRecord(assemblyBuf)
+					if err == nil {
+						records = append(records, rec)
+					}
+					assemblyBuf = nil
+				}
+			}
+		}
+	}
+
+	return records, nil
+}
