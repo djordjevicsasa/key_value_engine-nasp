@@ -104,3 +104,71 @@ func (p *MemtablePool) Get(key string) *model.Record {
 	}
 	return nil
 }
+
+func (p *MemtablePool) NeedsFlush() bool {
+	return len(p.readOnly) >= p.poolSize
+}
+
+func (p *MemtablePool) GetOldestForFlush() (Memtable, error) {
+	if len(p.readOnly) == 0 {
+		return nil, nil
+	}
+	oldest := p.readOnly[0]
+	p.readOnly = p.readOnly[1:]
+
+	if p.active == nil {
+		if err := p.createActive(); err != nil {
+			return nil, err
+		}
+	}
+
+	return oldest, nil
+}
+
+func (p *MemtablePool) GetUnflushedRecords() []*model.Record {
+	merged := make(map[string]*model.Record)
+	for _, tbl := range p.readOnly {
+		for _, rec := range tbl.GetAllSorted() {
+			if existing, ok := merged[rec.Key]; !ok || rec.Timestamp > existing.Timestamp {
+				merged[rec.Key] = rec
+			}
+		}
+	}
+	if p.active != nil {
+		for _, rec := range p.active.GetAllSorted() {
+			if existing, ok := merged[rec.Key]; !ok || rec.Timestamp > existing.Timestamp {
+				merged[rec.Key] = rec
+			}
+		}
+	}
+	records := make([]*model.Record, 0, len(merged))
+	for _, rec := range merged {
+		records = append(records, rec)
+	}
+	sortRecords(records)
+	return records
+}
+
+func (p *MemtablePool) GetAllSorted() []*model.Record {
+	merged := make(map[string]*model.Record)
+	for _, tbl := range p.readOnly {
+		for _, rec := range tbl.GetAllSorted() {
+			if existing, ok := merged[rec.Key]; !ok || rec.Timestamp > existing.Timestamp {
+				merged[rec.Key] = rec
+			}
+		}
+	}
+	if p.active != nil {
+		for _, rec := range p.active.GetAllSorted() {
+			if existing, ok := merged[rec.Key]; !ok || rec.Timestamp > existing.Timestamp {
+				merged[rec.Key] = rec
+			}
+		}
+	}
+	records := make([]*model.Record, 0, len(merged))
+	for _, rec := range merged {
+		records = append(records, rec)
+	}
+	sortRecords(records)
+	return records
+}
