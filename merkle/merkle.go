@@ -110,6 +110,45 @@ func (t *MerkleTree) Serialize() []byte{
 	}
 
 	return buf
+}
+	// Deserijalizuje Merkle stablo iz bajtova
+func DeserializeTree(data []byte) *MerkleTree {
+	if len(data) < 4 {
+		return &MerkleTree{}
+	}
 
+	levelCount := int(binary.LittleEndian.Uint32(data[0:4]))
+	if levelCount == 0 {
+		return &MerkleTree{}
+	}
 
+	offset := 4
+	levels := make([][]*MerkleNode, levelCount)
+	for l := 0; l < levelCount; l++ {
+		if offset+4 > len(data) {
+			break
+		}
+		nodeCount := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+		offset += 4
+
+		nodes := make([]*MerkleNode, nodeCount)
+		for n := 0; n < nodeCount; n++ {
+			if offset+32 > len(data) {
+				break
+			}
+			hash := make([]byte, 32)
+			copy(hash, data[offset:offset+32])
+			nodes[n] = &MerkleNode{Hash: hash}
+			offset += 32
+		}
+		levels[l] = nodes
+	}
+
+	// Poslednji nivo sadrzi koren
+	tree := &MerkleTree{Nodes: levels}
+	if len(levels) > 0 && len(levels[len(levels)-1]) > 0 {
+		tree.Root = levels[len(levels)-1][0]
+	}
+
+	return tree
 }
