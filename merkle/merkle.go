@@ -152,3 +152,13 @@ func DeserializeTree(data []byte) *MerkleTree {
 
 	return tree
 }
+
+// Verifikuje integritet podataka poredjenjem sa sacuvanim stablom
+func Verify(data [][]byte, savedTree *MerkleTree) bool {
+	if savedTree == nil || savedTree.Root == nil {
+		return len(data) == 0
+	}
+
+	newTree := BuildTree(data)
+	return newTree.RootHash() == savedTree.RootHash()
+}
