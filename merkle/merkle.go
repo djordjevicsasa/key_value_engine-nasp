@@ -80,3 +80,36 @@ func (t *MerkleTree) RootHash() string {
 	}
 	return hex.EncodeToString(t.Root.Hash)
 }
+// Serijalizuje stablo u niz bajtova za cuvanje na disk
+// Format: [BrojNivoa(4)] za svaki nivo:[BrojCvorova(4)] [Hash(32)]...
+func (t *MerkleTree) Serialize() []byte{
+	if  t.Root == nil{
+
+		return make([]byte,4)//samo broj nivova = 0
+
+	}
+
+
+	var buf []byte
+
+	// Broj nivoa
+	levelCount := make([]byte, 4)
+	binary.LittleEndian.PutUint32(levelCount, uint32(len(t.Nodes)))
+	buf = append(buf, levelCount...)
+
+
+	// Svaki nivo
+	for _, level := range t.Nodes {
+		nodeCount := make([]byte, 4)
+		binary.LittleEndian.PutUint32(nodeCount, uint32(len(level)))
+		buf = append(buf, nodeCount...)
+
+		for _, node := range level {
+			buf = append(buf, node.Hash...)
+		}
+	}
+
+	return buf
+
+
+}
