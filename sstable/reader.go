@@ -47,4 +47,55 @@ func LoadSummary(summaryPath string, mgr *block.CachedManager) (string, string, 
 	}
 	minKey := string(data[offset : offset+minKeySize])
 	offset += minKeySize
+
+	// Max kljuc
+	if offset+4 > len(data) {
+		return "", "", nil, model.ErrCorruptedRecord
+	}
+	maxKeySize := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+	offset += 4
+	if offset+maxKeySize > len(data) {
+		return "", "", nil, model.ErrCorruptedRecord
+	}
+	maxKey := string(data[offset : offset+maxKeySize])
+	offset += maxKeySize
+
+	// Broj summary zapisa
+	if offset+4 > len(data) {
+		return "", "", nil, model.ErrCorruptedRecord
+	}
+	count := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+	offset += 4
+
+	entries := make([]SummaryEntry, 0, count)
+	for i := 0; i < count && offset < len(data); i++ {
+		if offset+4 > len(data) {
+			return "", "", nil, model.ErrCorruptedRecord
+		}
+		keySize := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+		offset += 4
+
+		if offset+keySize > len(data) {
+			return "", "", nil, model.ErrCorruptedRecord
+		}
+		key := string(data[offset : offset+keySize])
+		offset += keySize
+
+		if offset+8 > len(data) {
+			return "", "", nil, model.ErrCorruptedRecord
+		}
+		indexOffset := binary.LittleEndian.Uint64(data[offset : offset+8])
+		offset += 8
+
+		entries = append(entries, SummaryEntry{
+			Key:         key,
+			IndexOffset: indexOffset,
+		})
+	}
+
+	return minKey, maxKey, entries, nil
+
+
+
+
 }
