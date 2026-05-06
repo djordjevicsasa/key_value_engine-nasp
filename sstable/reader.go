@@ -21,3 +21,30 @@ func LoadFilter(filterPath string, mgr *block.CachedManager) (*bloom.BloomFilter
 	}
 	return bf, nil
 }
+
+/ Ucitava Summary strukturu iz fajla
+// Vraca min kljuc, max kljuc i listu summary zapisa
+func LoadSummary(summaryPath string, mgr *block.CachedManager) (string, string, []SummaryEntry, error) {
+	data, err := mgr.ReadFile(summaryPath)
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	if len(data) < 12 {
+		return "", "", nil, model.ErrCorruptedRecord
+	}
+
+	offset := 0
+
+	// Citamo min kljuc
+	if offset+4 > len(data) {
+		return "", "", nil, model.ErrCorruptedRecord
+	}
+	minKeySize := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+	offset += 4
+	if offset+minKeySize > len(data) {
+		return "", "", nil, model.ErrCorruptedRecord
+	}
+	minKey := string(data[offset : offset+minKeySize])
+	offset += minKeySize
+}
