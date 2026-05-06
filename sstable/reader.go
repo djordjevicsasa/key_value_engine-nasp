@@ -125,3 +125,94 @@ func SearchSummary(entries []SummaryEntry, key string) (uint64, uint64) {
 
 	return startOffset, endOffset
 }
+
+// Pretrazuje Index fajl u zadatom opsegu i trazi trazeni kljuc
+// Vraca offset i velicinu zapisa u Data fajlu
+func SearchIndex(indexPath string, startOffset, endOffset uint64, key string, mgr *block.CachedManager) (uint64, uint32, bool, error) {
+	data, err := mgr.ReadFile(indexPath)
+	if err != nil {
+		return 0, 0, false, err
+	}
+
+	start := int(startOffset)
+	end := len(data)
+	if endOffset > 0 && int(endOffset) < end {
+		end = int(endOffset)
+	}
+
+	offset := start
+	for offset < end {
+		if offset+4 > end {
+			break
+		}
+
+		keySize := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+		offset += 4
+
+		if offset+keySize+12 > len(data) {
+			break
+		}
+
+		entryKey := string(data[offset : offset+keySize])
+		offset += keySize
+
+		dataOffset := binary.LittleEndian.Uint64(data[offset : offset+8])
+		offset += 8
+
+		dataSize := binary.LittleEndian.Uint32(data[offset : offset+4])
+		offset += 4
+
+		if entryKey == key {
+			return dataOffset, dataSize, true, nil
+		}
+
+		// Index je sortiran — ako smo presli trazeni kljuc, prekidamo
+		if entryKey > key {
+			break
+		}
+	}
+
+	return 0, 0, false, nil
+}
+
+// Cita zapis iz Data fajla na zadatom offset-u sa zadatom velicinom
+func ReadDataRecord(dataPath string, offset uint64, size uint32, mgr *block.CachedManager) (*model.Record, error) {
+	buf, err := mgr.ReadRaw(dataPath, int64(offset), int(size))
+	if err != nil {
+		return nil, err
+	}
+
+	return model.DeserializeRecord(buf)
+}
+
+// Ucitava Merkle stablo iz Metadata fajla
+func LoadMetadata(metadataPath string, mgr *block.CachedManager) (*merkle.MerkleTree, error) {
+	data, err := mgr.ReadFile(metadataPath)
+	if err != nil {
+		return nil, err
+	}
+	return merkle.DeserializeTree(data), nil
+}
+
+// Verifikuje integritet Data fajla koriscenjem Merkle stabla
+func VerifySSTable(sst *SSTable, mgr *block.CachedManager) (bool, error) {
+	// Ucitavamo Merkle stablo
+	tree, err := LoadMetadata(sst.MetadataPath, mgr)
+	if err != nil {
+		return false, err
+	}
+
+	// Ucitavamo sve zapise iz Data fajla
+	records, err := ReadAllData(sst.DataPath, mgr)
+	if err != nil {
+		return false, err
+	}
+
+	// Serijalizujemo zapise za poredjenje
+	var dataChunks [][]byte
+	for _, rec := range records {
+		dataChunks = append(dataChunks, rec.Serialize())
+	}
+
+	return merkle.Verify(dataChunks, tree), nil
+}
