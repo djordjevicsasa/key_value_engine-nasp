@@ -99,3 +99,29 @@ func LoadSummary(summaryPath string, mgr *block.CachedManager) (string, string, 
 
 
 }
+
+// Pretrazuje Summary da pronadje opseg u Index fajlu gde kljuc moze biti
+// Vraca pocetni i krajnji offset u Index fajlu
+func SearchSummary(entries []SummaryEntry, key string) (uint64, uint64) {
+	if len(entries) == 0 {
+		return 0, 0
+	}
+
+	startOffset := entries[0].IndexOffset
+	endOffset := uint64(0) // 0 znaci "do kraja fajla"
+
+	for i := 0; i < len(entries); i++ {
+		if entries[i].Key <= key {
+			startOffset = entries[i].IndexOffset
+			if i+1 < len(entries) {
+				endOffset = entries[i+1].IndexOffset
+			} else {
+				endOffset = 0
+			}
+		} else {
+			break
+		}
+	}
+
+	return startOffset, endOffset
+}
