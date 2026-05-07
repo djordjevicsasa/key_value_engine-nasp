@@ -216,3 +216,64 @@ func VerifySSTable(sst *SSTable, mgr *block.CachedManager) (bool, error) {
 
 	return merkle.Verify(dataChunks, tree), nil
 }
+// Cita sve zapise iz Data fajla
+func ReadAllData(dataPath string, mgr *block.CachedManager) ([]*model.Record, error) {
+	data, err := mgr.ReadFile(dataPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var records []*model.Record
+	offset := 0
+
+	for offset < len(data) {
+		recordSize, err := model.GetRecordSize(data[offset:])
+		if err != nil || offset+recordSize > len(data) {
+			break
+		}
+
+		rec, err := model.DeserializeRecord(data[offset : offset+recordSize])
+		if err != nil {
+			break
+		}
+
+		records = append(records, rec)
+		offset += recordSize
+	}
+
+	return records, nil
+}
+
+// Pretrazuje jednu SSTable tabelu za zadatim kljucem — kompletni read path
+// Redosled: Bloom Filter → Summary → Index → Data
+func SearchSSTable(sst *SSTable, key string, mgr *block.CachedManager) (*model.Record, error) {
+	// 1. Provera Bloom Filtera — ako kaze da ne postoji, sigurno ne postoji
+	bf, err := LoadFilter(sst.FilterPath, mgr)
+	if err != nil {
+		return nil, err
+	}
+	if !bf.Contains([]byte(key)) {
+		return nil, nil // kljuc sigurno nije u ovoj tabeli
+	}
+
+	// 2. Ucitamo Summary i proverimo da li je kljuc u opsegu
+	minKey, maxKey, summaryEntries, err := LoadSummary(sst.SummaryPath, mgr)
+	if err != nil {
+		return nil, err
+	}
+	if key < minKey || key > maxKey {
+		return nil, nil // kljuc je van opsega ove tabele
+	}
+
+	// 3. Pretrazujemo Summary da nadjemo opseg u Index-u
+	startOffset, endOffset := SearchSummary(summaryEntries, key)
+
+	// 4. Pretrazujemo Index u tom opsegu
+	dataOffset, dataSize, found, err := SearchIndex(sst.IndexPath, startOffset, endOffset, key, mgr)
+	if err != nil || !found {
+		return nil, err
+	}
+
+	// 5. Citamo zapis iz Data fajla
+	return ReadDataRecord(sst.DataPath, dataOffset, dataSize, mgr)
+}
