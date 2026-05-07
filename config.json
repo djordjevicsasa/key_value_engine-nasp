@@ -1,0 +1,17 @@
+{
+  "wal_dir": "data/wal",
+  "wal_segment_size": 5,
+  "wal_block_size": 4096,
+  "memtable_type": "skiplist",
+  "memtable_max_size_kb": 64,
+  "memtable_pool_size": 3,
+  "sstable_dir": "data/sstable",
+  "summary_step": 5,
+  "block_size_kb": 4,
+  "block_cache_capacity": 50,
+  "get_cache_capacity": 100,
+  "bloom_expected_items": 1000,
+  "bloom_false_positive_rate": 0.01,
+  "token_bucket_max_tokens": 100,
+  "token_bucket_refill_interval_ms": 1000
+}
