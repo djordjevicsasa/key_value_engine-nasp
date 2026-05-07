@@ -22,7 +22,7 @@ func LoadFilter(filterPath string, mgr *block.CachedManager) (*bloom.BloomFilter
 	return bf, nil
 }
 
-/ Ucitava Summary strukturu iz fajla
+// Ucitava Summary strukturu iz fajla
 // Vraca min kljuc, max kljuc i listu summary zapisa
 func LoadSummary(summaryPath string, mgr *block.CachedManager) (string, string, []SummaryEntry, error) {
 	data, err := mgr.ReadFile(summaryPath)
