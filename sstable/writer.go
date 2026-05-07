@@ -111,3 +111,32 @@ func WriteSSTable(dir string, id string, records []*model.Record, summaryStep in
 
 	return sst, nil
 }
+// Serijalizuje Index zapise
+// Format svakog zapisa: [KeySize(4)] [Key] [DataOffset(8)] [DataSize(4)]
+func serializeIndex(entries []IndexEntry) []byte {
+	var buf []byte
+
+	for _, entry := range entries {
+		keyBytes := []byte(entry.Key)
+
+		// Key size
+		ks := make([]byte, 4)
+		binary.LittleEndian.PutUint32(ks, uint32(len(keyBytes)))
+		buf = append(buf, ks...)
+
+		// Key
+		buf = append(buf, keyBytes...)
+
+		// Data offset
+		off := make([]byte, 8)
+		binary.LittleEndian.PutUint64(off, entry.DataOffset)
+		buf = append(buf, off...)
+
+		// Data size
+		ds := make([]byte, 4)
+		binary.LittleEndian.PutUint32(ds, entry.DataSize)
+		buf = append(buf, ds...)
+	}
+
+	return buf
+}
