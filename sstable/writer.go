@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"nasp-kv-engine/block"
-	"nasp-kv-engine/bloom"
-	"nasp-kv-engine/merkle"
-	"nasp-kv-engine/model"
+	"key_value_engine-nasp/block"
+	"key_value_engine-nasp/bloom"
+	"key_value_engine-nasp/merkle"
+	"key_value_engine-nasp/model"
 )
 
 // SSTable struktura na disku — svaka tabela ima 5 fajlova:
@@ -111,6 +111,7 @@ func WriteSSTable(dir string, id string, records []*model.Record, summaryStep in
 
 	return sst, nil
 }
+
 // Serijalizuje Index zapise
 // Format svakog zapisa: [KeySize(4)] [Key] [DataOffset(8)] [DataSize(4)]
 func serializeIndex(entries []IndexEntry) []byte {
@@ -140,6 +141,7 @@ func serializeIndex(entries []IndexEntry) []byte {
 
 	return buf
 }
+
 // Gradi Summary strukturu — uzimamo svaki summaryStep-ti zapis iz Index-a
 // Na pocetku cuvamo min i max kljuc tabele
 // Format: [MinKeySize(4)] [MinKey] [MaxKeySize(4)] [MaxKey] [BrojZapisa(4)] [SummaryEntry...]

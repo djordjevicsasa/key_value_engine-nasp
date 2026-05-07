@@ -3,10 +3,10 @@ package sstable
 import (
 	"encoding/binary"
 
-	"nasp-kv-engine/block"
-	"nasp-kv-engine/bloom"
-	"nasp-kv-engine/merkle"
-	"nasp-kv-engine/model"
+	"key_value_engine-nasp/block"
+	"key_value_engine-nasp/bloom"
+	"key_value_engine-nasp/merkle"
+	"key_value_engine-nasp/model"
 )
 
 // Ucitava Bloom Filter iz Filter fajla — koristi se za brzu proveru pre pretrage
@@ -94,9 +94,6 @@ func LoadSummary(summaryPath string, mgr *block.CachedManager) (string, string, 
 	}
 
 	return minKey, maxKey, entries, nil
-
-
-
 
 }
 
@@ -216,6 +213,7 @@ func VerifySSTable(sst *SSTable, mgr *block.CachedManager) (bool, error) {
 
 	return merkle.Verify(dataChunks, tree), nil
 }
+
 // Cita sve zapise iz Data fajla
 func ReadAllData(dataPath string, mgr *block.CachedManager) ([]*model.Record, error) {
 	data, err := mgr.ReadFile(dataPath)
