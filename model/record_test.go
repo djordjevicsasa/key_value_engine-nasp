@@ -46,3 +46,15 @@ func TestRecordSerialization(t *testing.T) {
 		t.Errorf("Expected timestamp %d, got %d", rec.Timestamp, deserialized.Timestamp)
 	}
 }
+func TestRecordCorruptedCRC(t *testing.T) {
+	rec := NewRecord("test", []byte("data"), false)
+	serialized := rec.Serialize()
+
+	// Corrupting the data portion
+	serialized[len(serialized)-1] ^= 0xFF
+
+	_, err := DeserializeRecord(serialized)
+	if err != ErrCRCMismatch {
+		t.Errorf("Expected ErrCRCMismatch but got: %v", err)
+	}
+}
