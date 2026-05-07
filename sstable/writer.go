@@ -140,3 +140,62 @@ func serializeIndex(entries []IndexEntry) []byte {
 
 	return buf
 }
+// Gradi Summary strukturu — uzimamo svaki summaryStep-ti zapis iz Index-a
+// Na pocetku cuvamo min i max kljuc tabele
+// Format: [MinKeySize(4)] [MinKey] [MaxKeySize(4)] [MaxKey] [BrojZapisa(4)] [SummaryEntry...]
+// SummaryEntry: [KeySize(4)] [Key] [IndexOffset(8)]
+func buildSummary(indexEntries []IndexEntry, step int) []byte {
+	var buf []byte
+
+	if len(indexEntries) == 0 {
+		return buf
+	}
+
+	// Min kljuc
+	minKey := []byte(indexEntries[0].Key)
+	mk := make([]byte, 4)
+	binary.LittleEndian.PutUint32(mk, uint32(len(minKey)))
+	buf = append(buf, mk...)
+	buf = append(buf, minKey...)
+
+	// Max kljuc
+	maxKey := []byte(indexEntries[len(indexEntries)-1].Key)
+	xk := make([]byte, 4)
+	binary.LittleEndian.PutUint32(xk, uint32(len(maxKey)))
+	buf = append(buf, xk...)
+	buf = append(buf, maxKey...)
+
+	// Racunamo pozicije u Index fajlu za svaki zapis
+	var summaryEntries []SummaryEntry
+	indexOffset := uint64(0)
+	for i, entry := range indexEntries {
+		if i%step == 0 || i == len(indexEntries)-1 {
+			summaryEntries = append(summaryEntries, SummaryEntry{
+				Key:         entry.Key,
+				IndexOffset: indexOffset,
+			})
+		}
+		// Velicina jednog Index zapisa: 4 + len(key) + 8 + 4
+		indexOffset += uint64(4 + len(entry.Key) + 8 + 4)
+	}
+
+	// Broj summary zapisa
+	count := make([]byte, 4)
+	binary.LittleEndian.PutUint32(count, uint32(len(summaryEntries)))
+	buf = append(buf, count...)
+
+	// Summary zapisi
+	for _, se := range summaryEntries {
+		keyBytes := []byte(se.Key)
+		ks := make([]byte, 4)
+		binary.LittleEndian.PutUint32(ks, uint32(len(keyBytes)))
+		buf = append(buf, ks...)
+		buf = append(buf, keyBytes...)
+
+		off := make([]byte, 8)
+		binary.LittleEndian.PutUint64(off, se.IndexOffset)
+		buf = append(buf, off...)
+	}
+
+	return buf
+}
