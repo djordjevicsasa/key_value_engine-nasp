@@ -2,6 +2,11 @@ package engine
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"key_value_engine-nasp/block"
@@ -222,4 +227,116 @@ func (e *Engine) flush() error {
 	}
 
 	return nil
+}
+
+func (e *Engine) loadExistingSSTables() error {
+	if _, err := os.Stat(e.cfg.SSTableDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	entries, err := os.ReadDir(e.cfg.SSTableDir)
+	if err != nil {
+		return err
+	}
+	// Skupljamo jedinstvene SSTable ID-jeve
+	idSet := make(map[string]bool)
+	for _, entry := range entries {
+		name := entry.Name()
+		// Odredjujemo ID iz imena fajla (sve pre "_data.db", "_filter.db" itd.)
+		for _, suffix := range []string{"_data.db", "_filter.db", "_index.db", "_summary.db", "_metadata.db"} {
+			if strings.HasSuffix(name, suffix) {
+				id := strings.TrimSuffix(name, suffix)
+				idSet[id] = true
+				break
+			}
+		}
+	}
+
+	var ids []string
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		tsi, ci, oki := parseSSTableID(ids[i])
+		tsj, cj, okj := parseSSTableID(ids[j])
+
+		if oki && okj {
+			if tsi != tsj {
+				return tsi > tsj
+			}
+			if ci != cj {
+				return ci > cj
+			}
+			return ids[i] > ids[j]
+		}
+
+		if oki != okj {
+			return oki
+		}
+
+		return ids[i] > ids[j]
+	})
+
+	for _, id := range ids {
+		sst := sstable.NewSSTablePaths(e.cfg.SSTableDir, id)
+
+		if !fileExists(sst.DataPath) || !fileExists(sst.FilterPath) ||
+			!fileExists(sst.IndexPath) || !fileExists(sst.SummaryPath) ||
+			!fileExists(sst.MetadataPath) {
+			continue
+		}
+
+		minKey, maxKey, _, err := sstable.LoadSummary(sst.SummaryPath, e.blockMgr)
+		if err != nil {
+			continue
+		}
+		sst.MinKey = minKey
+		sst.MaxKey = maxKey
+
+		valid, verr := sstable.VerifySSTable(sst, e.blockMgr)
+		if verr != nil || !valid {
+			continue
+		}
+
+		e.sstables = append(e.sstables, sst)
+		e.sstCounter++
+	}
+
+	if len(e.sstables) > 0 {
+		// Ucitano SSTable tabela sa diska
+	}
+
+	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func parseSSTableID(id string) (timestamp int64, counter int, ok bool) {
+	parts := strings.Split(id, "_")
+	if len(parts) != 3 || parts[0] != "sst" {
+		return 0, 0, false
+	}
+
+	ts, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+
+	c, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return 0, 0, false
+	}
+
+	return ts, c, true
+}
+
+func (e *Engine) Close() error {
+	return nil
+}
+
+func (e *Engine) ConfigPath() string {
+	return filepath.Join(".", "config.json")
 }
