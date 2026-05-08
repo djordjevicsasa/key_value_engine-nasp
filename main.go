@@ -115,7 +115,7 @@ func handleGet(eng *engine.Engine, parts []string) {
 		case model.ErrKeyNotFound:
 			fmt.Printf("Kljuc '%s' nije pronadjen.\n", key)
 		case model.ErrDeleted:
-			fmt.Printf("Kljuc '%s' je obrisan.\n", key)
+			fmt.Printf("Kljuc '%s' nije pronadjen.\n", key)
 		case model.ErrRateLimited:
 			fmt.Println("Greska: prekoracen broj dozvoljenih zahteva. Sacekajte.")
 		default:
@@ -139,7 +139,7 @@ func handleDelete(eng *engine.Engine, parts []string) {
 	if err != nil {
 		switch err {
 		case model.ErrKeyNotFound:
-			fmt.Printf("Kljuc '%s' ne postoji — nema sta da se obrise.\n", key)
+			fmt.Printf("Kljuc '%s' nije pronadjen.\n", key)
 		case model.ErrRateLimited:
 			fmt.Println("Greska: prekoracen broj dozvoljenih zahteva. Sacekajte.")
 		default:
